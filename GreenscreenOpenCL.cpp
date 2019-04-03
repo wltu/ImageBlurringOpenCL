@@ -96,19 +96,44 @@ void OpenCLTest() {
 }
 
 void OpenCVTest() {
-	Mat image;
-	image = imread("greenscreen.jpg", IMREAD_COLOR);   // Read the file
+	Mat image, background;
+	vector<uchar> imageVec;
+	vector<uchar> backVec;
+	int rows;
 
-	if (!image.data)                              // Check for invalid input
-	{
+
+	image = imread("greenscreen.jpg", IMREAD_COLOR);   // Read the file
+	background = imread("background.jpg", IMREAD_COLOR);
+
+	if (!image.data || !background.data){
 		cout << "Could not open or find the image" << endl;
 		return;
 	}
+	
+
+	imageVec.assign(image.datastart, image.dataend);
+	backVec.assign(background.datastart, background.dataend);
+
+	rows = image.rows;
+
+	if (backVec.size() == imageVec.size()) {
+		for (int i = 0; i < imageVec.size(); i += 3) {
+			if (imageVec[i] < 50 && imageVec[i + 2] < 50 && imageVec[i + 1] > 200) {
+				imageVec[i] = backVec[i];
+				imageVec[i + 1] = backVec[i + 1];
+				imageVec[i + 2] = backVec[i + 2];
+			}
+		}
+	}
+	
+	image = Mat(imageVec).reshape(3, rows); 
 
 	namedWindow("Display window", WINDOW_AUTOSIZE);// Create a window for display.
 	imshow("Display window", image);                   // Show our image inside it.
 
 	waitKey(0);
+
+	imwrite("greenscreen_output.jpg", image);
 }
 
 int main() {
