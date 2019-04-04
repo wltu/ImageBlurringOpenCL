@@ -1,2 +1,2 @@
-# GreenscreenOpenCL
-OpenCL Project for Green Screen Image Processing 
+# ImageBlurringOpenCL
+OpenCL Project for Blurring Image Processing 
