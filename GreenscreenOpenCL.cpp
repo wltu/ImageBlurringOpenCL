@@ -25,6 +25,8 @@ using namespace std::filesystem;
 
 
 string currentDir = "";
+double OpenCVTime = 0;
+double OpenCLTime = 0;
 int rows = -1;
 
 void OpenCLTest() {
@@ -162,17 +164,52 @@ string getCurrentDir() {
 	#endif
 		return str;
 
+}
+
+void OpenCVProcess(Mat &image) {
+	double start = omp_get_wtime();
+	blur(image, image, Size(10, 10));
+	OpenCVTime += (omp_get_wtime() - start);
+
+
+	namedWindow("Display window", WINDOW_AUTOSIZE);// Create a window for display.
+	imshow("Display window", image);                   // Show our image inside it.
+
+	waitKey(0);
+}
+
+void OpenCLProcess() {
+
+}
+
+void OpenCLProcessDataStructure() {
 
 }
 
 
-void saveData(vector<vector<uchar>> &vec, string dir) {
+
+void blurTest() {
+	Mat image;
+
+	image = imread("input/greenscreen/greenscreen.jpg", IMREAD_COLOR);
+
+	blur(image, image, Size(10, 10));
+
+
+	namedWindow("Display window", WINDOW_AUTOSIZE);		// Create a window for display.
+	imshow("Display window", image);                   // Show our image inside it.
+
+	waitKey(0);
+
+}
+
+void blurImageProcess() {
 	Mat image;
 	vector<uchar> imageVec;
 	stringstream inputImage;
 	string currentImage;
-
-	for (const auto & entry : directory_iterator(currentDir + dir)) {
+	
+	for (const auto & entry : directory_iterator(currentDir + "/input")) {
 		inputImage << entry.path() << endl;
 
 		currentImage = inputImage.str();
@@ -193,79 +230,26 @@ void saveData(vector<vector<uchar>> &vec, string dir) {
 
 		if (!image.data) {
 			cout << "Could not open or find the image" << endl;
-			return;
+			break;
 		}
 
+		OpenCVProcess(image);
 
 		imageVec.assign(image.datastart, image.dataend);
-		vec.push_back(imageVec);
+		OpenCLProcess();
 
 		inputImage.str(string());
 		inputImage.clear();
 	}
-}
 
-void initImage(vector<vector<uchar>> &inputsImage, vector<vector<uchar>> &inputsBackground) {
-	saveData(inputsImage, "/input/greenscreen");
-	saveData(inputsBackground, "/input/background");
-}
-
-void CPU_Process(vector<vector<uchar>> input, vector<vector<uchar>> background) {
-	Mat image;
-
-	vector<uchar> imageVec;
-	vector<uchar> backVec;
-
-	double start = omp_get_wtime();
-
-	for (int k = 0; k < input.size(); k++) {
-		for (int j = 0; j < background.size(); j++) {
-			imageVec = input[k];
-			backVec = background[j];
-
-			if (backVec.size() == imageVec.size()) {
-				for (int i = 0; i < imageVec.size(); i += 3) {
-					if (imageVec[i] < 50 && imageVec[i + 2] < 50 && imageVec[i + 1] > 200) {
-						imageVec[i] = backVec[i];
-						imageVec[i + 1] = backVec[i + 1];
-						imageVec[i + 2] = backVec[i + 2];
-					}
-				}
-			}
-		}
-	}
-
-	cout << "Time: " << omp_get_wtime() - start << " seconds" << endl;
-}
-
-void OpenCL_Process() {
-
-}
-
-void OpenCL_Process_DataStructure() {
-
-}
-
-
-
-void blurTest() {
-	Mat image;
-
-	image = imread("input/greenscreen/greenscreen.jpg", IMREAD_COLOR);
-
-	blur(image, image, Size(10, 10));
-
-
-	namedWindow("Display window", WINDOW_AUTOSIZE);// Create a window for display.
-	imshow("Display window", image);                   // Show our image inside it.
-
-	waitKey(0);
-
+	cout << "Time (OpenCV): " << OpenCVTime<< " seconds" << endl;
 }
 
 int main() {
 	currentDir = "";
 	currentDir = getCurrentDir();
+
+	blurImageProcess();
 
 	/*vector<vector<uchar>> inputs;
 	vector<vector<uchar>> background;
@@ -275,6 +259,4 @@ int main() {
 
 	//OpenCLTest();
 	//OpenCVTest();
-
-	blurTest();
 }
