@@ -12,6 +12,7 @@
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <opencv2/imgproc/imgproc.hpp>
 
 #include <omp.h>
 
@@ -247,16 +248,33 @@ void OpenCL_Process_DataStructure() {
 
 
 
+void blurTest() {
+	Mat image;
+
+	image = imread("input/greenscreen/greenscreen.jpg", IMREAD_COLOR);
+
+	blur(image, image, Size(10, 10));
+
+
+	namedWindow("Display window", WINDOW_AUTOSIZE);// Create a window for display.
+	imshow("Display window", image);                   // Show our image inside it.
+
+	waitKey(0);
+
+}
+
 int main() {
 	currentDir = "";
 	currentDir = getCurrentDir();
 
-	vector<vector<uchar>> inputs;
+	/*vector<vector<uchar>> inputs;
 	vector<vector<uchar>> background;
 	initImage(inputs, background);
 
-	CPU_Process(inputs, background);
+	CPU_Process(inputs, background);*/
 
 	//OpenCLTest();
-	OpenCVTest();
+	//OpenCVTest();
+
+	blurTest();
 }
