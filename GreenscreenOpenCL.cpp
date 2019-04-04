@@ -1,7 +1,4 @@
 #include "pch.h"
-
-#include "pch.h"
-
 #include <iostream>
 #include <math.h>
 #include <string.h>
@@ -16,9 +13,18 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
+#include <omp.h>
+
+#include <windows.h>
+#include <filesystem>
+
 using namespace cv;
 using namespace std;
+using namespace std::filesystem;
 
+
+string currentDir = "";
+int rows = -1;
 
 void OpenCLTest() {
 	vector<cl::Platform> platforms;
@@ -99,11 +105,11 @@ void OpenCVTest() {
 	Mat image, background;
 	vector<uchar> imageVec;
 	vector<uchar> backVec;
-	int rows;
+	
 
 
-	image = imread("greenscreen.jpg", IMREAD_COLOR);   // Read the file
-	background = imread("background.jpg", IMREAD_COLOR);
+	image = imread("input/greenscreen/greenscreen.jpg", IMREAD_COLOR);   // Read the file
+	background = imread("input/background/background.jpg", IMREAD_COLOR);
 
 	if (!image.data || !background.data){
 		cout << "Could not open or find the image" << endl;
@@ -116,6 +122,8 @@ void OpenCVTest() {
 
 	rows = image.rows;
 
+	double start = omp_get_wtime();
+
 	if (backVec.size() == imageVec.size()) {
 		for (int i = 0; i < imageVec.size(); i += 3) {
 			if (imageVec[i] < 50 && imageVec[i + 2] < 50 && imageVec[i + 1] > 200) {
@@ -126,6 +134,8 @@ void OpenCVTest() {
 		}
 	}
 	
+	cout << "Time: " << omp_get_wtime() - start << " seconds" << endl;
+
 	image = Mat(imageVec).reshape(3, rows); 
 
 	namedWindow("Display window", WINDOW_AUTOSIZE);// Create a window for display.
@@ -133,10 +143,120 @@ void OpenCVTest() {
 
 	waitKey(0);
 
-	imwrite("greenscreen_output.jpg", image);
+	//imwrite("greenscreen_output.jpg", image);
 }
 
+string getCurrentDir() {
+	string str;
+	TCHAR path[MAX_PATH];
+	GetCurrentDirectory(MAX_PATH, path);
+
+	#ifndef UNICODE
+		str = path;
+		return str;
+	#else
+		std::wstring wStr = path;
+		str = std::string(wStr.begin(), wStr.end());
+		return str;
+	#endif
+		return str;
+
+
+}
+
+
+void saveData(vector<vector<uchar>> &vec, string dir) {
+	Mat image;
+	vector<uchar> imageVec;
+	stringstream inputImage;
+	string currentImage;
+
+	for (const auto & entry : directory_iterator(currentDir + dir)) {
+		inputImage << entry.path() << endl;
+
+		currentImage = inputImage.str();
+
+		currentImage = currentImage.substr(1, currentImage.find_last_of('"') - 1);
+		image = imread(currentImage, IMREAD_COLOR);
+
+		if (rows == -1) {
+			rows = image.rows;
+		}
+		else {
+			if (rows != image.rows) {
+				cout << "Image Size does not match!";
+
+				return;
+			}
+		}
+
+		if (!image.data) {
+			cout << "Could not open or find the image" << endl;
+			return;
+		}
+
+
+		imageVec.assign(image.datastart, image.dataend);
+		vec.push_back(imageVec);
+
+		inputImage.str(string());
+		inputImage.clear();
+	}
+}
+
+void initImage(vector<vector<uchar>> &inputsImage, vector<vector<uchar>> &inputsBackground) {
+	saveData(inputsImage, "/input/greenscreen");
+	saveData(inputsBackground, "/input/background");
+}
+
+void CPU_Process(vector<vector<uchar>> input, vector<vector<uchar>> background) {
+	Mat image;
+
+	vector<uchar> imageVec;
+	vector<uchar> backVec;
+
+	double start = omp_get_wtime();
+
+	for (int k = 0; k < input.size(); k++) {
+		for (int j = 0; j < background.size(); j++) {
+			imageVec = input[k];
+			backVec = background[j];
+
+			if (backVec.size() == imageVec.size()) {
+				for (int i = 0; i < imageVec.size(); i += 3) {
+					if (imageVec[i] < 50 && imageVec[i + 2] < 50 && imageVec[i + 1] > 200) {
+						imageVec[i] = backVec[i];
+						imageVec[i + 1] = backVec[i + 1];
+						imageVec[i + 2] = backVec[i + 2];
+					}
+				}
+			}
+		}
+	}
+
+	cout << "Time: " << omp_get_wtime() - start << " seconds" << endl;
+}
+
+void OpenCL_Process() {
+
+}
+
+void OpenCL_Process_DataStructure() {
+
+}
+
+
+
 int main() {
+	currentDir = "";
+	currentDir = getCurrentDir();
+
+	vector<vector<uchar>> inputs;
+	vector<vector<uchar>> background;
+	initImage(inputs, background);
+
+	CPU_Process(inputs, background);
+
 	//OpenCLTest();
 	OpenCVTest();
 }
