@@ -175,9 +175,9 @@ string getCurrentDir() {
 }
 
 // OpenCV Blur Application
-void blurOpenCV(Mat &image) {
+void blurOpenCV(Mat &image, int kernel_size) {
 	double start = omp_get_wtime();
-	blur(image, image, Size(9, 9));
+	blur(image, image, Size(kernel_size, kernel_size));
 	OpenCVTime += (omp_get_wtime() - start);
 
 	namedWindow("Display window (OpenCV)", WINDOW_AUTOSIZE);// Create a window for display.
@@ -229,12 +229,11 @@ void PassFilter(vector<uchar>& vec, int rows) {
 }
 
 // Initial OpenCL blur application 
-void blurOpenCL(vector<uchar> &vec, int rows) {
+void blurOpenCL(vector<uchar> &vec, int rows, int kernel_size) {
 	//PassFilter(vec, rows);
 	
 	vector<uchar> output(vec.size());
 
-	int window_size = 9;
 	int width = vec.size() / rows;
 	int size = vec.size();
 
@@ -264,7 +263,7 @@ void blurOpenCL(vector<uchar> &vec, int rows) {
 
 	err = kernel.setArg(0, inBuf);
 	err = kernel.setArg(1, outBuf);
-	err = kernel.setArg(2, window_size);
+	err = kernel.setArg(2, kernel_size);
 	err = kernel.setArg(3, width );
 	err = kernel.setArg(4, size);
 
@@ -289,7 +288,14 @@ void blurImageProcessDataStructure() {
 }
 
 // Start of comparision of OpenCV and OpenCL process.
-void blurImageProcess() {
+void blurImageProcess(int kernel_size) {
+	if(kernel_size % 2 == 0){
+		cout << "Error: Kernel Size must be odd number.";
+
+		return;
+	}
+
+
 	int count = 0;
 	Mat image;
 	vector<uchar> imageVec;
@@ -309,11 +315,11 @@ void blurImageProcess() {
 			break;
 		}
 
-		blurOpenCV(image);
+		blurOpenCV(image, kernel_size);
 
 		imageVec.assign(image.datastart, image.dataend);
 
-		blurOpenCL(imageVec, image.rows);
+		blurOpenCL(imageVec, image.rows, kernel_size);
 
 		inputImage.str(string());
 		inputImage.clear();
@@ -330,8 +336,9 @@ int main() {
 	setUpOpenCL();
 	currentDir = getCurrentDir();
 
-	blurImageProcess();
+	blurImageProcess(9);
 
+	blurImageProcess(15);
 	
 	//OpenCLTest();
 	//OpenCVTest();
