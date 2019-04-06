@@ -62,30 +62,6 @@ void setUpOpenCL() {
 }
 
 void OpenCLTest() {
-	//vector<cl::Platform> platforms;
-	//vector<cl::Device> devices;
-	cl::Platform::get(&platforms);
-
-	_ASSERT(platforms.size() > 0);
-	cout << "Number of plaftorms: " << platforms.size() << endl;
-
-
-	auto platform = platforms.front();
-
-	platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
-
-	_ASSERT(devices.size() > 0);
-	cout << "Number of devices: " << platforms.size() << endl;
-
-	auto device = devices.front();
-	auto vender = device.getInfo<CL_DEVICE_VENDOR>();
-	auto version = device.getInfo<CL_DEVICE_VERSION>();
-	cout << vender << endl;
-	cout << version << endl;
-
-	cout << "Hello World!" << endl;
-
-
 	ifstream infile("kernel.cl");
 	string src(istreambuf_iterator<char>(infile), (istreambuf_iterator<char>()));
 	cl::Program::Sources sources(1, make_pair(src.c_str(), src.length()));
@@ -201,19 +177,17 @@ string getCurrentDir() {
 // OpenCV Blur Application
 void blurOpenCV(Mat &image) {
 	double start = omp_get_wtime();
-	blur(image, image, Size(10, 10));
+	blur(image, image, Size(9, 9));
 	OpenCVTime += (omp_get_wtime() - start);
 
-	namedWindow("Display window", WINDOW_AUTOSIZE);// Create a window for display.
-	imshow("Display window", image);                   // Show our image inside it.
+	namedWindow("Display window (OpenCV)", WINDOW_AUTOSIZE);// Create a window for display.
+	imshow("Display window (OpenCV)", image);                   // Show our image inside it.
 
 	waitKey(0);
 }
 
 // Test OpenCL application on image.
 void PassFilter(vector<uchar>& vec, int rows) {
-	setUpOpenCL();
-
 	ifstream infile("kernel.cl");
 	string src(istreambuf_iterator<char>(infile), (istreambuf_iterator<char>()));
 	cl::Program::Sources sources(1, make_pair(src.c_str(), src.length()));
@@ -258,12 +232,11 @@ void PassFilter(vector<uchar>& vec, int rows) {
 void blurOpenCL(vector<uchar> &vec, int rows) {
 	//PassFilter(vec, rows);
 	
-	int window_size = 10;
+	vector<uchar> output(vec.size());
+
+	int window_size = 9;
 	int width = vec.size() / rows;
 	int size = vec.size();
-
-
-	setUpOpenCL();
 
 	ifstream infile("kernel.cl");
 	string src(istreambuf_iterator<char>(infile), (istreambuf_iterator<char>()));
@@ -286,28 +259,28 @@ void blurOpenCL(vector<uchar> &vec, int rows) {
 	cl::Buffer inBuf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(uchar) * vec.size(), vec.data(), &err);
 	cl::Buffer outBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(uchar)* vec.size());
 
+	double start = omp_get_wtime();
+
 
 	err = kernel.setArg(0, inBuf);
 	err = kernel.setArg(1, outBuf);
 	err = kernel.setArg(2, window_size);
-	err = kernel.setArg(3, width);
+	err = kernel.setArg(3, width );
 	err = kernel.setArg(4, size);
-
-	vector<uchar> output(vec.size());
 
 	// Send Device
 	cl::CommandQueue queue(context, device);
 	err = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(vec.size()), cl::NDRange(workGroupSize)); // Execute task
 	err = queue.enqueueReadBuffer(outBuf, CL_TRUE, 0, sizeof(uchar) * output.size(), output.data()); // Copy data from global memory in GPU back into CPU memory.
 
+	OpenCLTime += (omp_get_wtime() - start);
+
 	Mat image = Mat(output).reshape(3, rows);
 
-	namedWindow("Display window", WINDOW_AUTOSIZE);// Create a window for display.
-	imshow("Display window", image);                   // Show our image inside it.
+	namedWindow("Display window (OpenCL)", WINDOW_AUTOSIZE);// Create a window for display.
+	imshow("Display window (OpenCL)", image);                   // Show our image inside it.
 
 	waitKey(0);
-
-	cout << "ok" << endl;
 }
 
 // OpenCL with better data structure
@@ -317,6 +290,7 @@ void blurImageProcessDataStructure() {
 
 // Start of comparision of OpenCV and OpenCL process.
 void blurImageProcess() {
+	int count = 0;
 	Mat image;
 	vector<uchar> imageVec;
 	stringstream inputImage;
@@ -335,20 +309,25 @@ void blurImageProcess() {
 			break;
 		}
 
-		//blurOpenCV(image);
+		blurOpenCV(image);
 
 		imageVec.assign(image.datastart, image.dataend);
+
 		blurOpenCL(imageVec, image.rows);
 
 		inputImage.str(string());
 		inputImage.clear();
+
+		count++;
 	}
 
-	cout << "Time (OpenCV): " << OpenCVTime<< " seconds" << endl;
+	cout << "Time (OpenCV): " << OpenCVTime / count << " seconds" << endl;
+	cout << "Time (OpenCL): " << OpenCLTime / count << " seconds" << endl;
 }
 
 
 int main() {
+	setUpOpenCL();
 	currentDir = getCurrentDir();
 
 	blurImageProcess();

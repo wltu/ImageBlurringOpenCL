@@ -48,8 +48,8 @@ __kernel void average_blur(const __global  uchar* input, __global uchar* output,
 			if (index + r * width >= 0 && index + r * width < size) {
 				for (int c = -window_size / 2; c <= window_size/2; c++) {
 
-					if (relative_index + c >= 0 && relative_index + c < width) {
-						newIndex = index + r * width + c;
+					if (relative_index + 3*c >= 0 && relative_index + 3*c < width) {
+						newIndex = index + r * width + 3 * c;
 						x += input[newIndex];
 						y += input[newIndex + 1];
 						z += input[newIndex + 2];
