@@ -198,6 +198,7 @@ string getCurrentDir() {
 
 }
 
+// OpenCV Blur Application
 void blurOpenCV(Mat &image) {
 	double start = omp_get_wtime();
 	blur(image, image, Size(10, 10));
@@ -209,7 +210,7 @@ void blurOpenCV(Mat &image) {
 	waitKey(0);
 }
 
-
+// Test OpenCL application on image.
 void PassFilter(vector<uchar>& vec, int rows) {
 	setUpOpenCL();
 
@@ -253,6 +254,7 @@ void PassFilter(vector<uchar>& vec, int rows) {
 	waitKey(0);
 }
 
+// Initial OpenCL blur application 
 void blurOpenCL(vector<uchar> &vec, int rows) {
 	//PassFilter(vec, rows);
 	
@@ -308,10 +310,12 @@ void blurOpenCL(vector<uchar> &vec, int rows) {
 	cout << "ok" << endl;
 }
 
+// OpenCL with better data structure
 void blurImageProcessDataStructure() {
 
 }
 
+// Start of comparision of OpenCV and OpenCL process.
 void blurImageProcess() {
 	Mat image;
 	vector<uchar> imageVec;
@@ -344,10 +348,7 @@ void blurImageProcess() {
 }
 
 
-
-
 int main() {
-	currentDir = "";
 	currentDir = getCurrentDir();
 
 	blurImageProcess();
