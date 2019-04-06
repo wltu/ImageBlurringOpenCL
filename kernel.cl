@@ -65,3 +65,26 @@ __kernel void average_blur(const __global  uchar* input, __global uchar* output,
 		output[index + 2] = z / area;
 	}
 }
+
+__kernel void average_blur_data(const __global  int3* input, __global int3* output, int half_size, int width, int size) {
+	int index = get_global_id(0);
+
+	int relative_index = index % width;
+	int area = 0;
+	int3 current;
+
+	for (int r = -half_size; r <= half_size; r++)
+	{
+		if (index + r * width >= 0 && index + r * width < size) {
+			for (int c = -half_size; c <= half_size; c++) {
+				if (relative_index + c >= 0 && relative_index + c < width) {
+					current += input[index + r * width + c];
+					area++;
+				}
+			}
+		}
+	}
+
+	output[index] = current / area;
+}
+

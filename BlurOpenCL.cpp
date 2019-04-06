@@ -14,6 +14,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
+
 #include <omp.h>
 
 #include <windows.h>
@@ -30,6 +31,8 @@ using namespace std::filesystem;
 string currentDir = "";
 double OpenCVTime = 0;
 double OpenCLTime = 0;
+double OpenCLTimeData = 0;
+
 int rows = -1;
 
 vector<cl::Platform> platforms;
@@ -174,6 +177,27 @@ string getCurrentDir() {
 
 }
 
+void convertData(vector<uchar> &input, vector<cl_int3> &output) {
+	cl_int3 num;
+
+	for (int i = 0; i < input.size(); i += 3) {
+		num = { input[i], input[i + 1], input[i + 2] };
+
+		output.push_back(num);
+	}
+}
+
+void convertDataBack(vector<cl_int3> &input, vector<uchar> &output) {
+	cl_int3 num;
+
+	for (int i = 0; i < input.size(); i++) {
+		output.push_back(input[i].x);
+		output.push_back(input[i].y);
+		output.push_back(input[i].z);
+	}
+}
+
+
 // OpenCV Blur Application
 void blurOpenCV(Mat &image, int kernel_size) {
 	double start = omp_get_wtime();
@@ -284,9 +308,64 @@ void blurOpenCL(vector<uchar> &vec, int rows, int kernel_size) {
 }
 
 // OpenCL with better data structure
-void blurImageProcessDataStructure() {
+void blurImageProcessData(vector<cl_int3> &vec, int rows, int kernel_size) {
+	kernel_size /= 2;
+	vector<cl_int3> output(vec.size());
+	vector<uchar> finalOutput;
 
+	int width = vec.size() / rows;
+	int size = vec.size();
+
+	ifstream infile("kernel.cl");
+	string src(istreambuf_iterator<char>(infile), (istreambuf_iterator<char>()));
+	cl::Program::Sources sources(1, make_pair(src.c_str(), src.length()));
+
+	cl_int err = 0;
+
+	cl::Context context(device, 0, 0, 0, &err);
+
+	cl::Program program(context, sources);
+
+	err = program.build("-cl-std=CL1.2");
+
+	err = 0;
+	cl::Kernel kernel(program, "average_blur_data", &err);
+	auto workGroupSize = kernel.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(device);
+	auto workGroups = vec.size() / workGroupSize;
+
+
+	cl::Buffer inBuf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(cl_int3) * vec.size(), vec.data(), &err);
+	cl::Buffer outBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(cl_int3)* vec.size());
+
+	double start = omp_get_wtime();
+
+
+	err = kernel.setArg(0, inBuf);
+	err = kernel.setArg(1, outBuf);
+	err = kernel.setArg(2, kernel_size);
+	err = kernel.setArg(3, width);
+	err = kernel.setArg(4, size);
+
+	// Send Device
+	cl::CommandQueue queue(context, device);
+	err = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(vec.size()), cl::NDRange(workGroupSize)); // Execute task
+	err = queue.enqueueReadBuffer(outBuf, CL_TRUE, 0, sizeof(cl_int3) * output.size(), output.data()); // Copy data from global memory in GPU back into CPU memory.
+
+	OpenCLTimeData += (omp_get_wtime() - start);
+
+	convertDataBack(output, finalOutput);
+
+
+	Mat image = Mat(finalOutput).reshape(3, rows);
+
+	namedWindow("Display window (OpenCL_Data)", WINDOW_AUTOSIZE);// Create a window for display.
+	imshow("Display window (OpenCL_Data)", image);                   // Show our image inside it.
+
+	waitKey(0);
 }
+
+
+
 
 // Start of comparision of OpenCV and OpenCL process.
 void blurImageProcess(int kernel_size) {
@@ -300,6 +379,7 @@ void blurImageProcess(int kernel_size) {
 	int count = 0;
 	Mat image;
 	vector<uchar> imageVec;
+	vector<cl_int3> cl_data;
 	stringstream inputImage;
 	string currentImage;
 	
@@ -318,9 +398,15 @@ void blurImageProcess(int kernel_size) {
 
 		blurOpenCV(image, kernel_size);
 
+		// OpenCL
 		imageVec.assign(image.datastart, image.dataend);
-
 		blurOpenCL(imageVec, image.rows, kernel_size);
+
+
+		// OpenCL with uchar3 data
+		cl_data.clear();
+ 		convertData(imageVec, cl_data);
+		blurImageProcessData(cl_data, image.rows, kernel_size);
 
 		inputImage.str(string());
 		inputImage.clear();
@@ -332,7 +418,9 @@ void blurImageProcess(int kernel_size) {
 	cout << "Kernel Size: " << kernel_size << " by " << kernel_size << endl;
 
 	cout << "Time (OpenCV): " << OpenCVTime / count << " seconds" << endl;
-	cout << "Time (OpenCL): " << OpenCLTime / count << " seconds" << endl << endl;
+	cout << "Time (OpenCL): " << OpenCLTime / count << " seconds" << endl;
+	cout << "Time (OpenCL): " << OpenCLTimeData / count << " seconds" << endl << endl;
+
 }
 
 
@@ -341,9 +429,9 @@ int main() {
 	currentDir = getCurrentDir();
 
 	blurImageProcess(9);
+	//blurImageProcess(15);
 
-	blurImageProcess(15);
-	
+
 	//OpenCLTest();
 	//OpenCVTest();
 }
