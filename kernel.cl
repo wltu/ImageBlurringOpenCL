@@ -30,7 +30,7 @@ __kernel void pass_filter(const __global  uchar* input, __global uchar* output) 
 }
 
 
-__kernel void average_blur(const __global  uchar* input, __global uchar* output, int window_size, int width, int size) {
+__kernel void average_blur(const __global  uchar* input, __global uchar* output, int half_size, int width, int size) {
 	int index = get_global_id(0);
 
 
@@ -43,10 +43,10 @@ __kernel void average_blur(const __global  uchar* input, __global uchar* output,
 		int z = 0;
 		int newIndex;
 
-		for (int r = -window_size / 2; r <= window_size/2; r++)
+		for (int r = -half_size; r <= half_size; r++)
 		{
 			if (index + r * width >= 0 && index + r * width < size) {
-				for (int c = -window_size / 2; c <= window_size/2; c++) {
+				for (int c = -half_size; c <= half_size; c++) {
 
 					if (relative_index + 3*c >= 0 && relative_index + 3*c < width) {
 						newIndex = index + r * width + 3 * c;

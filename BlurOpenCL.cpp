@@ -232,6 +232,7 @@ void PassFilter(vector<uchar>& vec, int rows) {
 void blurOpenCL(vector<uchar> &vec, int rows, int kernel_size) {
 	//PassFilter(vec, rows);
 	
+	kernel_size /= 2;
 	vector<uchar> output(vec.size());
 
 	int width = vec.size() / rows;
@@ -327,8 +328,11 @@ void blurImageProcess(int kernel_size) {
 		count++;
 	}
 
+
+	cout << "Kernel Size: " << kernel_size << " by " << kernel_size << endl;
+
 	cout << "Time (OpenCV): " << OpenCVTime / count << " seconds" << endl;
-	cout << "Time (OpenCL): " << OpenCLTime / count << " seconds" << endl;
+	cout << "Time (OpenCL): " << OpenCLTime / count << " seconds" << endl << endl;
 }
 
 
