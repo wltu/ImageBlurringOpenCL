@@ -21,51 +21,47 @@ __kernel void NumericalReduction(__global int* data, __local int* localData, __g
 	}
 }
 
-__kernel void red_filter(const __global  int* input, __global int* output) {
-	int rowOffset = get_global_id(1) * get_global_size(0) * 3;
-	int my = 3 * get_global_id(0) + rowOffset;
+__kernel void pass_filter(const __global  uchar* input, __global uchar* output) {
+	int index = get_global_id(0);
 
-	int area = (hfs * 2) * (hfs * 2);
-	int fIndex = 0;
-	int sumR = 0.0;
-	int sumG = 0.0;
-	int sumB = 0.0;
-	int offset;
-	int curRow;
-
-
-	output[my] = input[my];
-	output[my + 1] = 0;
-	output[my + 2] = 0;
-}
-
-/*
-__kernel void red_filter(const __global  int* input, __global int* output, int hfs, int width) {
-	int rowOffset = get_global_id(1) * IMAGE_W * 3;
-	int my = 3 * get_global_id(0) + rowOffset;
-
-	int area = (hfs * 2) * (hfs * 2);
-	int fIndex = 0;
-	int sumR = 0.0;
-	int sumG = 0.0;
-	int sumB = 0.0;
-	int offset;
-	int curRow;
-
-	for (int r = -hfs; r <= hfs; r++)
-	{
-		curRow = my + r * (width * 3);
-		for (int c = -hfs; c <= hfs; c++, fIndex += 3) {
-			offset = c * 4;
-
-			sumR += input[curRow + offset];
-			sumG += input[curRow + offset + 1];
-			sumB += input[curRow + offset + 2];
-		}
+	if (index % 3 == 2) {
+		output[index] = input[index];
 	}
-
-	output[my] = sumR / area;
-	output[my + 1] = sumG / area;
-	output[my + 2] = sumB / area;
 }
-*/
+
+
+__kernel void average_blur(const __global  uchar* input, __global uchar* output, int window_size, int width, int size) {
+	int index = get_global_id(0);
+
+
+	if (index % 3 == 0) {
+		int relative_index = index % width;
+
+		int area = 0;
+		int x = 0;
+		int y = 0;
+		int z = 0;
+		int newIndex;
+
+		for (int r = -window_size / 2; r <= window_size/2; r++)
+		{
+			if (index + r * width >= 0 && index + r * width < size) {
+				for (int c = -window_size / 2; c <= window_size/2; c++) {
+
+					if (relative_index + 3*c >= 0 && relative_index + 3*c < width) {
+						newIndex = index + r * width + 3 * c;
+						x += input[newIndex];
+						y += input[newIndex + 1];
+						z += input[newIndex + 2];
+
+						area++;
+					}
+				}
+			}
+		}
+
+		output[index] = x / area;
+		output[index + 1] = y / area;
+		output[index + 2] = z / area;
+	}
+}
