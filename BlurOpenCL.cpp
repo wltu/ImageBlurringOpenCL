@@ -1,4 +1,5 @@
 #include "pch.h"
+
 #include <iostream>
 #include <math.h>
 #include <string.h>
@@ -7,16 +8,11 @@
 #include <array>
 #include<CL/cl.hpp>
 
-//#include "opencv2/imgproc.hpp"
-//#include "opencv2/highgui.hpp"
-
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
-
 #include <omp.h>
-
 #include <windows.h>
 #include <filesystem>
 
@@ -24,16 +20,13 @@ using namespace cv;
 using namespace std;
 using namespace std::filesystem;
 
-
 // Color format: BGR
 
-
+// Variables
 string currentDir = "";
 double OpenCVTime = 0;
 double OpenCLTime = 0;
 double OpenCLTimeData = 0;
-
-int rows = -1;
 
 vector<cl::Platform> platforms;
 vector<cl::Device> devices;
@@ -41,6 +34,39 @@ cl::Platform platform;
 cl::Device device;
 string vender;
 string version;
+
+cl::Context context;
+cl::Program program;
+
+// Set up all OpenCL compomnets.
+void setUpOpenCL();
+
+// Get the current source directory of the project.
+string getCurrentDir();
+
+// OpenCV Builtin Blur
+void blurOpenCV(Mat &image, int kernel_size, string name);
+
+// OOpenCL implementation of image blur.
+void blurOpenCL(vector<uchar> &vec, int rows, int kernel_size, string name);
+
+// OpenCL implementation of image blur uchar3 data structure.
+void blurOpenCLData(vector<uchar> &vec, int rows, int kernel_size, string name);
+
+// Compare performace of blur image processing between OpenCV and OpenCL
+void blurImageProcess(int kernel_size);
+
+
+int main() {
+	setUpOpenCL();
+	currentDir = getCurrentDir();
+
+	blurImageProcess(5);
+	blurImageProcess(9);
+	blurImageProcess(15);
+}
+
+
 
 void setUpOpenCL() {
 	cl::Platform::get(&platforms);
@@ -61,103 +87,17 @@ void setUpOpenCL() {
 	cout << vender << endl;
 	cout << version << endl;
 
-	cout << "Hello World!" << endl;
-}
-
-void OpenCLTest() {
 	ifstream infile("kernel.cl");
 	string src(istreambuf_iterator<char>(infile), (istreambuf_iterator<char>()));
 	cl::Program::Sources sources(1, make_pair(src.c_str(), src.length()));
 
 	cl_int err = 0;
 
-	cl::Context context(device, 0, 0, 0, &err);
+	context = cl::Context(device, 0, 0, 0, &err);
 
-	cl::Program program(context, sources);
+	program = cl::Program(context, sources);
 
 	err = program.build("-cl-std=CL1.2");
-
-	vector<int> vec(1024);
-
-	for (int i = 0; i < 1024; i++) {
-		vec[i] = i;
-	}
-
-	// int arr[3][2]
-	const int numRow = 2;
-	const int numCol = 3;
-	const int size = numCol * numRow;
-	array<array<int, numRow>, numCol> arr = { { {1,1}, {2,2}, {3,3}} };
-
-	err = 0;
-	cl::Kernel kernel(program, "NumericalReduction", &err);
-	auto workGroupSize = kernel.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(device);
-	auto workGroups = vec.size() / workGroupSize;
-
-
-	cl::Buffer inBuf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(int) * vec.size(), vec.data(), &err);
-	cl::Buffer outBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(int)* workGroups);
-
-
-	err = kernel.setArg(0, inBuf);
-	err = kernel.setArg(1, workGroupSize * sizeof(int), nullptr);
-	err = kernel.setArg(2, outBuf);
-
-	vector<int> output(workGroups);
-
-	// Send Device
-	cl::CommandQueue queue(context, device);
-	err = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(vec.size()), cl::NDRange(workGroupSize)); // Execute task
-	err = queue.enqueueReadBuffer(outBuf, CL_TRUE, 0, sizeof(int) * output.size(), output.data()); // Copy data from global memory in GPU back into CPU memory.
-
-	for (int& out : output) {
-		cout << out << endl;
-	}
-}
-
-void OpenCVTest() {
-	Mat image, background;
-	vector<uchar> imageVec;
-	vector<uchar> backVec;
-	
-
-
-	image = imread("input/greenscreen/greenscreen.jpg", IMREAD_COLOR);   // Read the file
-	background = imread("input/background/background.jpg", IMREAD_COLOR);
-
-	if (!image.data || !background.data){
-		cout << "Could not open or find the image" << endl;
-		return;
-	}
-	
-
-	imageVec.assign(image.datastart, image.dataend);
-	backVec.assign(background.datastart, background.dataend);
-
-	rows = image.rows;
-
-	double start = omp_get_wtime();
-
-	if (backVec.size() == imageVec.size()) {
-		for (int i = 0; i < imageVec.size(); i += 3) {
-			if (imageVec[i] < 50 && imageVec[i + 2] < 50 && imageVec[i + 1] > 200) {
-				imageVec[i] = backVec[i];
-				imageVec[i + 1] = backVec[i + 1];
-				imageVec[i + 2] = backVec[i + 2];
-			}
-		}
-	}
-	
-	cout << "Time: " << omp_get_wtime() - start << " seconds" << endl;
-
-	image = Mat(imageVec).reshape(3, rows); 
-
-	namedWindow("Display window", WINDOW_AUTOSIZE);// Create a window for display.
-	imshow("Display window", image);                   // Show our image inside it.
-
-	waitKey(0);
-
-	//imwrite("greenscreen_output.jpg", image);
 }
 
 string getCurrentDir() {
@@ -165,181 +105,58 @@ string getCurrentDir() {
 	TCHAR path[MAX_PATH];
 	GetCurrentDirectory(MAX_PATH, path);
 
-	#ifndef UNICODE
-		str = path;
-		return str;
-	#else
-		std::wstring wStr = path;
-		str = std::string(wStr.begin(), wStr.end());
-		return str;
-	#endif
-		return str;
+#ifndef UNICODE
+	str = path;
+	return str;
+#else
+	std::wstring wStr = path;
+	str = std::string(wStr.begin(), wStr.end());
+	return str;
+#endif
+	return str;
 
 }
 
-void convertData(vector<uchar> &input, vector<cl_int3> &output) {
-	cl_int3 num;
 
-	for (int i = 0; i < input.size(); i += 3) {
-		num = { input[i], input[i + 1], input[i + 2] };
-
-		output.push_back(num);
-	}
-}
-
-void convertDataBack(vector<cl_int3> &input, vector<uchar> &output) {
-	cl_int3 num;
-
-	for (int i = 0; i < input.size(); i++) {
-		output.push_back(input[i].x);
-		output.push_back(input[i].y);
-		output.push_back(input[i].z);
-	}
-}
-
-
-// OpenCV Blur Application
-void blurOpenCV(Mat &image, int kernel_size) {
+void blurOpenCV(Mat &image, int kernel_size, string name) {
 	double start = omp_get_wtime();
-	blur(image, image, Size(kernel_size, kernel_size));
+	blur(image, image, Size(kernel_size, kernel_size));			// OpenCV builtin image average blur.
 	OpenCVTime += (omp_get_wtime() - start);
 
-	namedWindow("Display window (OpenCV)", WINDOW_AUTOSIZE);// Create a window for display.
+	namedWindow("Display window (OpenCV)", WINDOW_AUTOSIZE);	// Create a window for display.
 	imshow("Display window (OpenCV)", image);                   // Show our image inside it.
 
 	waitKey(0);
+
+	// Save output image.
+	if (kernel_size == 9) {
+		imwrite("output/9x9_cv_" + name, image);
+	}
 }
 
-// Test OpenCL application on image.
-void PassFilter(vector<uchar>& vec, int rows) {
-	ifstream infile("kernel.cl");
-	string src(istreambuf_iterator<char>(infile), (istreambuf_iterator<char>()));
-	cl::Program::Sources sources(1, make_pair(src.c_str(), src.length()));
+void blurOpenCL(vector<uchar> &vec, int rows, int kernel_size, string name) {
+	int win_size = kernel_size;
 
-	cl_int err = 0;
+	double start = omp_get_wtime();
 
-	cl::Context context(device, 0, 0, 0, &err);
-
-	cl::Program program(context, sources);
-
-	err = program.build("-cl-std=CL1.2");
-
-	err = 0;
-	cl::Kernel kernel(program, "pass_filter", &err);
-	auto workGroupSize = kernel.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(device);
-	auto workGroups = vec.size() / workGroupSize;
-
-
-	cl::Buffer inBuf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(uchar) * vec.size(), vec.data(), &err);
-	cl::Buffer outBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(uchar)* vec.size());
-
-
-	err = kernel.setArg(0, inBuf);
-	err = kernel.setArg(1, outBuf);
-
-	vector<uchar> output(vec.size());
-
-	// Send Device
-	cl::CommandQueue queue(context, device);
-	err = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(vec.size()), cl::NDRange(workGroupSize)); // Execute task
-	err = queue.enqueueReadBuffer(outBuf, CL_TRUE, 0, sizeof(uchar) * output.size(), output.data()); // Copy data from global memory in GPU back into CPU memory.
-
-	Mat image = Mat(output).reshape(3, rows);
-
-	namedWindow("Display window", WINDOW_AUTOSIZE);// Create a window for display.
-	imshow("Display window", image);                   // Show our image inside it.
-
-	waitKey(0);
-}
-
-// Initial OpenCL blur application 
-void blurOpenCL(vector<uchar> &vec, int rows, int kernel_size) {
-	//PassFilter(vec, rows);
-	
 	kernel_size /= 2;
-	vector<uchar> output(vec.size());
 
 	int width = vec.size() / rows;
 	int size = vec.size();
-
-	ifstream infile("kernel.cl");
-	string src(istreambuf_iterator<char>(infile), (istreambuf_iterator<char>()));
-	cl::Program::Sources sources(1, make_pair(src.c_str(), src.length()));
+	vector<uchar> output(vec.size());
 
 	cl_int err = 0;
 
-	cl::Context context(device, 0, 0, 0, &err);
-
-	cl::Program program(context, sources);
-
-	err = program.build("-cl-std=CL1.2");
-
-	err = 0;
+	// Set up kernel for the GPU
 	cl::Kernel kernel(program, "average_blur", &err);
 	auto workGroupSize = kernel.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(device);
 	auto workGroups = vec.size() / workGroupSize;
 
-
+	// Set up data buffer.
 	cl::Buffer inBuf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(uchar) * vec.size(), vec.data(), &err);
 	cl::Buffer outBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(uchar)* vec.size());
 
-	double start = omp_get_wtime();
-
-
-	err = kernel.setArg(0, inBuf);
-	err = kernel.setArg(1, outBuf);
-	err = kernel.setArg(2, kernel_size);
-	err = kernel.setArg(3, width );
-	err = kernel.setArg(4, size);
-
-	// Send Device
-	cl::CommandQueue queue(context, device);
-	err = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(vec.size()), cl::NDRange(workGroupSize)); // Execute task
-	err = queue.enqueueReadBuffer(outBuf, CL_TRUE, 0, sizeof(uchar) * output.size(), output.data()); // Copy data from global memory in GPU back into CPU memory.
-
-	OpenCLTime += (omp_get_wtime() - start);
-
-	Mat image = Mat(output).reshape(3, rows);
-
-	namedWindow("Display window (OpenCL)", WINDOW_AUTOSIZE);// Create a window for display.
-	imshow("Display window (OpenCL)", image);                   // Show our image inside it.
-
-	waitKey(0);
-}
-
-// OpenCL with better data structure
-void blurImageProcessData(vector<cl_int3> &vec, int rows, int kernel_size) {
-	kernel_size /= 2;
-	vector<cl_int3> output(vec.size());
-	vector<uchar> finalOutput;
-
-	int width = vec.size() / rows;
-	int size = vec.size();
-
-	ifstream infile("kernel.cl");
-	string src(istreambuf_iterator<char>(infile), (istreambuf_iterator<char>()));
-	cl::Program::Sources sources(1, make_pair(src.c_str(), src.length()));
-
-	cl_int err = 0;
-
-	cl::Context context(device, 0, 0, 0, &err);
-
-	cl::Program program(context, sources);
-
-	err = program.build("-cl-std=CL1.2");
-
-	err = 0;
-	cl::Kernel kernel(program, "average_blur_data", &err);
-	auto workGroupSize = kernel.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(device);
-	auto workGroups = vec.size() / workGroupSize;
-
-
-	cl::Buffer inBuf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(cl_int3) * vec.size(), vec.data(), &err);
-	cl::Buffer outBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(cl_int3)* vec.size());
-
-	double start = omp_get_wtime();
-
-
+	// Set up kernel arguments.
 	err = kernel.setArg(0, inBuf);
 	err = kernel.setArg(1, outBuf);
 	err = kernel.setArg(2, kernel_size);
@@ -349,64 +166,160 @@ void blurImageProcessData(vector<cl_int3> &vec, int rows, int kernel_size) {
 	// Send Device
 	cl::CommandQueue queue(context, device);
 	err = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(vec.size()), cl::NDRange(workGroupSize)); // Execute task
-	err = queue.enqueueReadBuffer(outBuf, CL_TRUE, 0, sizeof(cl_int3) * output.size(), output.data()); // Copy data from global memory in GPU back into CPU memory.
+	err = queue.enqueueReadBuffer(outBuf, CL_TRUE, 0, sizeof(uchar) * output.size(), output.data()); // Copy data from global memory in GPU back into CPU memory.
 
-	OpenCLTimeData += (omp_get_wtime() - start);
+	// Convert vector into Mat.
+	Mat image = Mat(output).reshape(3, rows);
 
-	convertDataBack(output, finalOutput);
+	OpenCLTime += (omp_get_wtime() - start);
+
+	namedWindow("Display window (OpenCL)", WINDOW_AUTOSIZE);// Create a window for display.
+	imshow("Display window (OpenCL)", image);                   // Show our image inside it.
+
+	waitKey(0);
+
+	if (win_size == 9) {
+		imwrite("output/9x9_cl_" + name, image);
+	}
+}
+
+// OpenCL with better data structure
+void blurOpenCLData(vector<uchar> &vec, int rows, int kernel_size, string name) {
+
+	int win_size = kernel_size;
+	double start = omp_get_wtime();
+
+	kernel_size /= 2;
+	vector<cl_uchar3> output(vec.size() / 3);
+
+	int width = vec.size() / rows;
+	int size = vec.size();
+
+	cl_int err = 0;
+	cl::Kernel kernel(program, "convert_data", &err);
+	cl::CommandQueue queue(context, device);
+
+	auto workGroupSize = kernel.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(device);
+	auto workGroups = vec.size() / workGroupSize;
+
+	// Convert Data to uchar3
+	cl::Buffer inBuf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(uchar) * vec.size(), vec.data(), &err);
+	cl::Buffer outBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(cl_uchar3) * output.size());
+
+	err = kernel.setArg(0, inBuf);
+	err = kernel.setArg(1, outBuf);
+
+	err = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(vec.size()), cl::NDRange(workGroupSize)); // Execute task
+	err = queue.enqueueReadBuffer(outBuf, CL_TRUE, 0, sizeof(cl_uchar3) * output.size(), output.data()); // Copy data from global memory in GPU back into CPU memory.
 
 
-	Mat image = Mat(finalOutput).reshape(3, rows);
+	// Image blur.
+	kernel = cl::Kernel(program, "average_blur_data", &err);
+
+	inBuf = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(cl_uchar3) * output.size(), output.data(), &err);
+	outBuf = cl::Buffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(cl_uchar3)* output.size());
+
+	err = kernel.setArg(0, inBuf);
+	err = kernel.setArg(1, outBuf);
+	err = kernel.setArg(2, kernel_size);
+	err = kernel.setArg(3, width);
+	err = kernel.setArg(4, size);
+
+	err = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(output.size()), cl::NDRange(workGroupSize)); // Execute task
+	err = queue.enqueueReadBuffer(outBuf, CL_TRUE, 0, sizeof(cl_uchar3) * output.size(), output.data()); // Copy data from global memory in GPU back into CPU memory.
+
+
+	// Convert uchar3 data into uchar
+	kernel = cl::Kernel(program, "convert_data_back", &err);
+
+	inBuf = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_HOST_NO_ACCESS | CL_MEM_COPY_HOST_PTR, sizeof(cl_uchar3) * output.size(), output.data(), &err);
+	outBuf = cl::Buffer(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY, sizeof(uchar)* vec.size());
+
+	err = kernel.setArg(0, inBuf);
+	err = kernel.setArg(1, outBuf);
+
+	err = queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(output.size()), cl::NDRange(workGroupSize)); // Execute task
+	err = queue.enqueueReadBuffer(outBuf, CL_TRUE, 0, sizeof(uchar) * vec.size(), vec.data()); // Copy data from global memory in GPU back into CPU memory.
+	OpenCLTimeData += omp_get_wtime() - start;
+
+
+	// Convert vector into Mat.
+	Mat image = Mat(vec).reshape(3, rows);
+
+	OpenCLTimeData += omp_get_wtime() - start;
 
 	namedWindow("Display window (OpenCL_Data)", WINDOW_AUTOSIZE);// Create a window for display.
 	imshow("Display window (OpenCL_Data)", image);                   // Show our image inside it.
 
 	waitKey(0);
+
+	if (win_size == 9) {
+		imwrite("output/9x9_cld_" + name, image);
+	}
 }
 
-
-
-
-// Start of comparision of OpenCV and OpenCL process.
 void blurImageProcess(int kernel_size) {
-	if(kernel_size % 2 == 0){
+	if (kernel_size % 2 == 0) {
 		cout << "Error: Kernel Size must be odd number.";
 
 		return;
 	}
 
+	//Reset Time
+	OpenCVTime = 0;
+	OpenCLTime = 0;
+	OpenCLTimeData = 0;
+
 
 	int count = 0;
 	Mat image;
 	vector<uchar> imageVec;
-	vector<cl_int3> cl_data;
 	stringstream inputImage;
 	string currentImage;
-	
+	string name;
+	double start;
+	double time;
+
+	// Loop thorugh all images in the input folder.
 	for (const auto & entry : directory_iterator(currentDir + "/input")) {
 		inputImage << entry.path() << endl;
 
 		currentImage = inputImage.str();
 
 		currentImage = currentImage.substr(1, currentImage.find_last_of('"') - 1);
+		name = currentImage.substr(currentImage.find_last_of('\\') + 1);
+
+		start = omp_get_wtime();
+
+		// Read image data into at Mat.
 		image = imread(currentImage, IMREAD_COLOR);
 
 		if (!image.data) {
 			cout << "Could not open or find the image" << endl;
 			break;
 		}
+		// Time to read the image.
+		time = omp_get_wtime() - start;
+		OpenCVTime += time;
+		OpenCLTime += time;
+		OpenCLTimeData += time;
 
-		blurOpenCV(image, kernel_size);
+		start = omp_get_wtime();
+		imageVec.assign(image.datastart, image.dataend);	// Conver Mat into vector for the kernel to access it.
+		time = omp_get_wtime() - start;						//	Time for the data structure conversion.
+		OpenCLTime += time;
+		OpenCLTimeData += time;
+
+		// OpenCV
+		blurOpenCV(image, kernel_size, name);
+
 
 		// OpenCL
-		imageVec.assign(image.datastart, image.dataend);
-		blurOpenCL(imageVec, image.rows, kernel_size);
+		blurOpenCL(imageVec, image.rows, kernel_size, name);
 
+		// OpenCL with uchar3 data structure
+		blurOpenCLData(imageVec, image.rows, kernel_size, name);
 
-		// OpenCL with uchar3 data
-		cl_data.clear();
- 		convertData(imageVec, cl_data);
-		blurImageProcessData(cl_data, image.rows, kernel_size);
 
 		inputImage.str(string());
 		inputImage.clear();
@@ -414,24 +327,9 @@ void blurImageProcess(int kernel_size) {
 		count++;
 	}
 
-
+	// Print out average time for the different images for a given kernel size.
 	cout << "Kernel Size: " << kernel_size << " by " << kernel_size << endl;
-
 	cout << "Time (OpenCV): " << OpenCVTime / count << " seconds" << endl;
 	cout << "Time (OpenCL): " << OpenCLTime / count << " seconds" << endl;
 	cout << "Time (OpenCL): " << OpenCLTimeData / count << " seconds" << endl << endl;
-
-}
-
-
-int main() {
-	setUpOpenCL();
-	currentDir = getCurrentDir();
-
-	blurImageProcess(9);
-	//blurImageProcess(15);
-
-
-	//OpenCLTest();
-	//OpenCVTest();
 }
