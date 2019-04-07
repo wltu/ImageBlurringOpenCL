@@ -47,9 +47,24 @@ The performance of each implementation is measured by the total time spent from 
 ### Result: 
 
 #### Original:
+<p align="center">
+  <img width="600" height="400" src="https://user-images.githubusercontent.com/27719918/55678620-88421a80-58b1-11e9-971a-6978a4f34098.jpg">
+</p>
+
 #### OpenCV:
+<p align="center">
+  <img width="600" height="400" src="https://user-images.githubusercontent.com/27719918/55678632-b0317e00-58b1-11e9-9481-c3bc36d39a98.jpg">
+</p>
+
 #### OpenCL:
+<p align="center">
+  <img width="600" height="400" src="https://user-images.githubusercontent.com/27719918/55678623-97c16380-58b1-11e9-9616-5206786015a3.jpg">
+</p>
+
 #### OpenCL - Data:
+<p align="center">
+  <img width="600" height="400" src="https://user-images.githubusercontent.com/27719918/55678628-a7d94300-58b1-11e9-8df2-ed0b91df7cf1.jpg">
+</p>
 
 
 
